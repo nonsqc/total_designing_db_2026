@@ -787,12 +787,15 @@ LIMIT 10;
 
 ```sql
 SELECT
-    has_schema_privilege('inspector', 'chaplygin_food', 'USAGE')  AS has_usage,
-    has_schema_privilege('inspector', 'chaplygin_food', 'CREATE') AS has_create;
+    nspname AS schema_name,
+    has_schema_privilege('inspector', nspname, 'USAGE')  AS usage,
+    has_schema_privilege('inspector', nspname, 'CREATE') AS create
+FROM pg_namespace
+WHERE nspname = 'chaplygin_food';
 ```
 
 Ожидается: `USAGE`, `CREATE` (полный доступ).
-Факт: `has_usage [v] has_create [v]`
+Факт: `chaplygin_food usage [v] create [v]`
 Вердикт: OK
 
 ### G.2. Права на таблицы

@@ -542,8 +542,11 @@ LIMIT 10;
 -- G. Права `inspector`
 -- G.1. Права на схему (адаптировано: role_schema_grants не существует в PG)
 SELECT
-    has_schema_privilege('inspector', 'chaplygin_food', 'USAGE')  AS has_usage,
-    has_schema_privilege('inspector', 'chaplygin_food', 'CREATE') AS has_create;
+    nspname AS schema_name,
+    has_schema_privilege('inspector', nspname, 'USAGE')  AS usage,
+    has_schema_privilege('inspector', nspname, 'CREATE') AS create
+FROM pg_namespace
+WHERE nspname = 'chaplygin_food';
 -- Ожидается: true, true
 
 -- G.2. Права на таблицы

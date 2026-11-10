@@ -7,7 +7,7 @@ WITH RECURSIVE first_last AS (
     SELECT
         date_trunc('month', min(order_timestamp))::date AS first_month,
         date_trunc('month', max(order_timestamp))::date AS last_month
-    FROM pidido
+    FROM chaplygin_food."order"
     WHERE status = 'доставлен'
 ),
 months AS (
@@ -29,7 +29,7 @@ orders_agg AS (
         date_trunc('month', order_timestamp)::date AS month_start,
         coalesce(sum(order_amount), 0)  AS sum_no_commission,
         coalesce(sum(total_amount), 0)  AS sum_with_commission
-    FROM pidido
+    FROM chaplygin_food."order"
     WHERE status = 'доставлен'
     GROUP BY date_trunc('month', order_timestamp)::date
 ),
@@ -38,7 +38,7 @@ courier_agg AS (
     SELECT
         make_date(year, month, 1) AS month_start,
         coalesce(sum(amount), 0)  AS courier_pay
-    FROM courier_pay
+    FROM chaplygin_food.courier_pay
     GROUP BY make_date(year, month, 1)
 ),
 combined AS (

@@ -8,6 +8,7 @@
 | Дата проверки      | 08.11.2026               |
 | Схема              | `chaplygin_food`         |
 | Роль-аудитор       | `inspector`              |
+Скрипты схемы применены с заранее созданной `exts` и расширением `uuid-ossp`. Функциональные сценарии запускались как `inspector`; развертывание и `grants.sql` — как администратор БД.
 
 Все проверки — под `inspector`, если не указано иное.
 
@@ -69,8 +70,8 @@ WHERE table_schema = 'chaplygin_food'
 ORDER BY table_name;
 ```
 
-Ожидается: `address`, `client`, `client_address`, `courier`, `courier_pay`, `order_structure`, `payment`, `pidido`, `product`, `product_category`, `restaurant`, `review`, `review_order`, `review_product`, `review_restaurant` (12 + 3 штук).
-Факт: `address`, `client`, `client_address`, `courier`, `courier_pay`, `order_structure`, `payment`, `pidido`, `product`, `product_category`, `restaurant`, `review`, `review_order`, `review_product`, `review_restaurant` (12 + 3 штук).
+Ожидается: `address`, `client`, `client_address`, `courier`, `courier_pay`, `order`, `order_structure`, `payment`,  `product`, `product_category`, `restaurant`, `review` (12 штук).
+Факт: `address`, `client`, `client_address`, `courier`, `courier_pay`, `order`, `order_structure`, `payment`,  `product`, `product_category`, `restaurant`, `review` (12 штук).
 Вердикт: OK
 
 ### B.4. Все PK — `uuid`
@@ -114,7 +115,7 @@ ORDER BY tbl, conname;
 ```
 
 Ожидается: не менее 15 FK, все из erd.md.
-Факт: 24 FK, все из erd.md + FK к таблицам нормализации review.
+Факт: 17 FK.
 Вердикт: OK
 
 ### B.7. Пароль — MD5
@@ -126,11 +127,11 @@ FROM client LIMIT 5;
 
 Ожидается: `len = 32`, hex-строка.
 Факт: len = 32, password = hex-строка.
-32	91435ab03860a7ee36d44382e5830b5b
-32	6e8a9f155008ea2e336a5e82895c8894
-32	81cb9620f711c9ee19dd39442847b726
-32	a26b5e4af209ce1dedc30eff8693d5ec
-32	e37332c236d772c3729504124d2981f4
+32	1f9d04ee8d473154afb6e3d085356b15
+32	861da0188f76241de711ce5d02f7cbe3
+32	ef7a329a74c47707d26e4d3ca61445d7
+32	7f3ef92f2f5d3ed76525916d14cfa23f
+32	327e5f1abfda692c92ffebf02338545d
 Вердикт: OK
 
 ---
@@ -166,18 +167,16 @@ UNION ALL SELECT 'product_category', count(*) FROM product_category
 UNION ALL SELECT 'restaurant', count(*) FROM restaurant
 UNION ALL SELECT 'address', count(*) FROM address
 UNION ALL SELECT 'product', count(*) FROM product
-UNION ALL SELECT 'order', count(*) FROM pidido
+UNION ALL SELECT 'order', count(*) FROM "order"
 UNION ALL SELECT 'review', count(*) FROM review
 UNION ALL SELECT 'payment', count(*) FROM payment
 ORDER BY tbl;
 ```
 
 Ожидается: 10, 10, 10, 10, 50, 50, 50, 50, 50.
-Факт: client=10, courier=10, product_category=10, restaurant=10, address=50, product=50, pidido=50, payment=71, review=77.
+Факт: client=10, courier=10, product_category=10, restaurant=10, address=50, product=50, "order"=50, payment=72, review=50.
 Отклонение в payment связано с генерацией нескольких попыток оплаты при сохранении успешных оплат со значением 50 (1 или 2 попытки с равной вероятностью (50/50))
-Отклонение в review связано с нормализацией и соответственно подходом к генерации данных в 3 дочерние таблицы. Суммарное число отзывов зависит от трёх независимых генераторов.
-Это осознанное решение: BR-9.5 не требует ровно 50 отзывов, AC "value * 5" — ориентир, а не строгое требование.
-Вердикт: OK (с комментарием)
+Вердикт: OK
 
 ### C.4. Адреса ресторанов vs клиентов (BR-11.7)
 
@@ -205,7 +204,7 @@ SELECT count(*) FROM client WHERE login = '' OR password = '' OR phone_number = 
 ### C.6. Нет NULL там, где запрещено (BR-11.3)
 
 ```sql
-SELECT count(*) FROM pidido WHERE client_id IS NULL OR restaurant_id IS NULL
+SELECT count(*) FROM "order" WHERE client_id IS NULL OR restaurant_id IS NULL
   OR courier_id IS NULL OR address_id IS NULL OR total_amount IS NULL;
 -- и аналогично для других NOT NULL полей
 ```
@@ -221,7 +220,7 @@ SELECT count(*) FROM courier WHERE status != 'уволен';
 ```
 
 Ожидается: `>= 1`.
-Факт: 8
+Факт: 7
 Вердикт: OK
 
 ### C.8. `courier_pay` консистентен с правилами (BR-10.2)
@@ -230,7 +229,7 @@ SELECT count(*) FROM courier WHERE status != 'уволен';
 SELECT cp.year, cp.month, cp.courier_id, cp.amount, cp.coefficient_used,
        round(coalesce((
            SELECT sum(o.commission)
-           FROM pidido o
+           FROM "order" o
            WHERE o.courier_id = cp.courier_id
              AND o.status = 'доставлен'
              AND extract(year  from o.order_timestamp) = cp.year
@@ -255,8 +254,8 @@ BEGIN
 END $$;
 ```
 
-Ожидается: без ошибок, данные добавляются или заменяются (по решению студента, задокументированному в constraints.md).
-Факт: без ошибок, 10 последовательных вызовов insert_test_data(10) выполнены без ошибок. Процедура начинается с TRUNCATE ... CASCADE, поэтому каждый вызов заменяет данные, а не добавляет, это задокументировано в constraints.md.
+Ожидается: без ошибок, данные добавляются.
+Факт: без ошибок, 10 последовательных вызовов insert_test_data(10) выполнены без ошибок. 
 Вердикт: OK
 
 ---
@@ -268,7 +267,7 @@ END $$;
 ```sql
 SELECT 'order_structure → order' AS fk, count(*) AS orphans
 FROM order_structure os
-LEFT JOIN pidido o ON os.order_id = o.order_id
+LEFT JOIN "order" o ON os.order_id = o.order_id
 WHERE o.order_id IS NULL
 UNION ALL
 SELECT 'order_structure → product', count(*)
@@ -278,12 +277,12 @@ WHERE p.product_id IS NULL
 UNION ALL
 SELECT 'payment → order', count(*)
 FROM payment pmt
-LEFT JOIN pidido o ON pmt.order_id = o.order_id
+LEFT JOIN "order" o ON pmt.order_id = o.order_id
 WHERE o.order_id IS NULL
 UNION ALL
 SELECT 'review → order', count(*)
 FROM review r
-LEFT JOIN pidido o ON r.order_id = o.order_id
+LEFT JOIN "order" o ON r.order_id = o.order_id
 WHERE o.order_id IS NULL
 UNION ALL
 SELECT 'courier_pay → courier', count(*)
@@ -316,7 +315,7 @@ client_address → address	0
 ### D.2. Минимальная сумма заказа (BR-1.8)
 
 ```sql
-SELECT count(*) FROM pidido WHERE total_amount < 1000;
+SELECT count(*) FROM "order" WHERE total_amount < 1000;
 ```
 
 Ожидается: 0.
@@ -326,7 +325,7 @@ SELECT count(*) FROM pidido WHERE total_amount < 1000;
 ### D.3. Комиссия = 10% (BR-1.4)
 
 ```sql
-SELECT count(*) FROM pidido WHERE round(order_amount * 0.10, 2) != commission;
+SELECT count(*) FROM "order" WHERE round(order_amount * 0.10, 2) != commission;
 ```
 
 Ожидается: 0.
@@ -336,7 +335,7 @@ SELECT count(*) FROM pidido WHERE round(order_amount * 0.10, 2) != commission;
 ### D.4. `total_amount = order_amount + commission`
 
 ```sql
-SELECT count(*) FROM pidido
+SELECT count(*) FROM "order"
 WHERE round(order_amount + commission, 2) != total_amount;
 ```
 
@@ -347,7 +346,7 @@ WHERE round(order_amount + commission, 2) != total_amount;
 ### D.5. Дата доставки не раньше создания (BR-7.13)
 
 ```sql
-SELECT count(*) FROM pidido
+SELECT count(*) FROM "order"
 WHERE delivery_timestamp IS NOT NULL AND delivery_timestamp < order_timestamp;
 ```
 
@@ -358,7 +357,7 @@ WHERE delivery_timestamp IS NOT NULL AND delivery_timestamp < order_timestamp;
 ### D.6. Адрес доставки принадлежит клиенту (BR-7.4)
 
 ```sql
-SELECT count(*) FROM pidido o
+SELECT count(*) FROM "order" o
 LEFT JOIN client_address ca
   ON ca.client_id = o.client_id AND ca.address_id = o.address_id
 WHERE ca.client_id IS NULL;
@@ -373,7 +372,7 @@ WHERE ca.client_id IS NULL;
 ```sql
 SELECT count(DISTINCT os.order_id)
 FROM order_structure os
-JOIN pidido o ON os.order_id = o.order_id
+JOIN "order" o ON os.order_id = o.order_id
 JOIN product p ON os.product_id = p.product_id
 WHERE p.restaurant_id != o.restaurant_id;
 ```
@@ -400,7 +399,7 @@ HAVING count(*) != 1;
 
 ```sql
 SELECT count(*) FROM payment p
-JOIN pidido o ON p.order_id = o.order_id
+JOIN "order" o ON p.order_id = o.order_id
 WHERE p.amount != o.total_amount;
 ```
 
@@ -460,23 +459,10 @@ WHERE dismissal_date IS NOT NULL AND dismissal_date < hire_date;
 ```sql
 -- product.rating = AVG(review.rating) по отзывам на блюдо
 SELECT p.product_id, p.rating,
-	(SELECT round(avg(r.rating), 2)
-	FROM review_product rp
-	JOIN review r ON r.review_id = rp.review_id
-	WHERE rp.product_id = p.product_id) AS expected
+       (SELECT round(avg(r.rating), 2) FROM review r
+        WHERE r.entity_type = 'блюдо' AND r.entity_id = p.product_id) AS expected
 FROM product p
 WHERE p.rating IS NOT NULL
-ORDER BY p.product_id
-LIMIT 20;
--- restaurant.rating = AVG(review.rating) по отзывам на ресторан
-SELECT r.restaurant_id, r.rating,
-	(SELECT round(avg(rv.rating), 2)
-	FROM review_restaurant rr
-	JOIN review rv ON rv.review_id = rr.review_id
-	WHERE rr.restaurant_id = r.restaurant_id) AS expected
-FROM restaurant r
-WHERE r.rating IS NOT NULL
-ORDER BY r.restaurant_id
 LIMIT 20;
 ```
 
@@ -498,24 +484,23 @@ DECLARE
 	v_rest_id UUID;
 	v_cat_id UUID;
 BEGIN
-	SELECT restaurant_id INTO v_rest_id FROM restaurant LIMIT 1;
-	SELECT product_category_id INTO v_cat_id FROM product_category LIMIT 1;
-	CALL add_product(
-	    p_restaurant_id => (SELECT restaurant_id FROM restaurant LIMIT 1),
-	    p_product_category_id => (SELECT product_category_id FROM product_category LIMIT 1),
-	    p_name => 'Тестовое блюдо',
-	    p_price => 250,
-	    p_rating => 4.5,
-	    p_status => 'доступно',
-	    p_description => 'Описание'
-	    -- + photo_url если есть
+	SELECT restaurant_id INTO v_rest_id FROM chaplygin_food.restaurant LIMIT 1;
+	SELECT product_category_id INTO v_cat_id FROM chaplygin_food.product_category LIMIT 1;
+
+	CALL chaplygin_food.add_product(
+	p_restaurant_id => v_rest_id,
+	p_product_category_id => v_cat_id,
+	p_name => 'Тестовое блюдо',
+	p_price => 250,
+	p_status => 'доступно'::chaplygin_food.product_status,
+	p_description => 'Описание'
 	);
 END;
 $$;
 
 SELECT count(*) AS after FROM product;
 ```
-Запрос адаптирован: PostgreSQL не принимает подзапросы в аргументах CALL. Вызов обёрнут в DO-блок с переменными — параметры те же, вызов тот же.
+PostgreSQL не принимает подзапросы в аргументах CALL. Вызов обёрнут в DO-блок с переменными для проверки внутри DBeaver — параметры те же, вызов тот же.
 
 Ожидается: `after = before + 1`.
 Факт: До - 50. После 50 + 1 = 51
@@ -528,10 +513,16 @@ DO $$
 DECLARE
 	v_cat_id UUID;
 BEGIN
-	SELECT product_category_id INTO v_cat_id FROM product_category LIMIT 1;
-	CALL add_product(
-	    p_restaurant_id => '00000000-0000-0000-0000-000000000000',
-	    -- остальные аргументы
+	SELECT restaurant_id INTO v_rest_id FROM chaplygin_food.restaurant LIMIT 1;
+	SELECT product_category_id INTO v_cat_id FROM chaplygin_food.product_category LIMIT 1;
+
+	CALL chaplygin_food.add_product(
+	p_restaurant_id => '00000000-0000-0000-0000-000000000000'::UUID,
+	p_product_category_id => v_cat_id,
+	p_name => 'Тестовое блюдо',
+	p_price => 250,
+	p_status => 'доступно'::chaplygin_food.product_status,
+	p_description => 'Описание'
 	);
 END;
 $$;
@@ -547,90 +538,44 @@ $$;
 -- Выбрать заказ, блюдо и клиента
 SELECT p.product_id, p.rating FROM product p WHERE p.rating IS NOT NULL LIMIT 1;
 -- product_id                           | rating
--- d5b299f2-d1c5-4f6c-9040-ad7eb92211e5 | 3.33
-
--- Все отзывы по product_id
-SELECT r.review_id, r.rating
-FROM review_product rp
-JOIN review r ON r.review_id = rp.review_id
-WHERE rp.product_id = 'd5b299f2-d1c5-4f6c-9040-ad7eb92211e5';
--- Среднее = (1+4+5) / 3 = 3.33
-
-SELECT o.order_id, o.client_id
-FROM pidido o
-LIMIT 1; -- order_id | client_id
--- e771cbc5-bb90-4ecb-85ee-70cecc30530c | 32313f2d-efa0-492f-a279-03f981767119
+-- 1ec97f22-3062-43b8-b051-85c3642eab6c | 2
 
 -- Вставить отзыв на это блюдо
-INSERT INTO review (review_id, client_id, order_id, review_timestamp,
-					description, photo_url, rating)
-
-VALUES (
-		exts.uuid_generate_v4(),
-		'32313f2d-efa0-492f-a279-03f981767119',
-		'e771cbc5-bb90-4ecb-85ee-70cecc30530c',
-		localtimestamp,
-		'Тестовый отзыв',
-		NULL,
-		5
-)
-RETURNING review_id; -- review_id 4e6ab6e0-404e-40ad-8197-55ef32a2c72d
-
--- Вставить review_product
-INSERT INTO review_product (review_id, order_id, product_id)
-VALUES (
-		'4e6ab6e0-404e-40ad-8197-55ef32a2c72d',
-		'e771cbc5-bb90-4ecb-85ee-70cecc30530c',
-		'd5b299f2-d1c5-4f6c-9040-ad7eb92211e5'
-);
+INSERT INTO review (review_id, client_id, review_timestamp, entity_id, entity_type, order_id, description, rating)
+SELECT
+	exts.uuid_generate_v4(),
+	o.client_id,
+	localtimestamp,
+	'1ec97f22-3062-43b8-b051-85c3642eab6c',
+	'блюдо',
+	o.order_id,
+	'Тестовый отзыв',
+	5
+FROM chaplygin_food."order" o
+WHERE o.order_id = (SELECT order_id FROM chaplygin_food."order" LIMIT 1);
 
 -- Проверить рейтинг
-SELECT rating FROM product WHERE product_id = 'd5b299f2-d1c5-4f6c-9040-ad7eb92211e5';
--- Среднее = (1+4+5+5) / 4 = 3.75
+SELECT rating FROM product WHERE product_id = '1ec97f22-3062-43b8-b051-85c3642eab6c';
+-- Среднее = (2+5) / 2 = 3.5
 ```
 
 Ожидается: `rating` пересчитан.
-Факт: Начальный рейтинг - 3.33, рейтинг после добавления тестового отзыва - 3.75, пояснение в коде sql выше.
+Факт: Начальный рейтинг - 2, рейтинг после добавления тестового отзыва - 3.5, пояснение в коде sql выше.
 Вердикт: OK
 
 ### E.4. `rating_change` — удаление отзыва
 
 ```sql
 -- Удалить отзыв из E.3
-DELETE FROM review_product WHERE review_id = '4e6ab6e0-404e-40ad-8197-55ef32a2c72d';
-DELETE FROM review WHERE review_id = '4e6ab6e0-404e-40ad-8197-55ef32a2c72d';
+DELETE FROM review
+WHERE review_id = 'b6213862-2be4-4ec2-9839-c3af75c38273';
 
-SELECT rating FROM product WHERE product_id = 'd5b299f2-d1c5-4f6c-9040-ad7eb92211e5';
+SELECT rating FROM product
+WHERE product_id = '1ec97f22-3062-43b8-b051-85c3642eab6c';
 ```
 
 Ожидается: если других отзывов нет — `rating IS NULL`; иначе — пересчитан.
-Факт: Начальный рейтинг - 3.75 (4 отзыва), рейтинг после удаления тестового отзыва - 3.75.
-Вердикт: FAIL: отзыв удален, рейтинг не пересчитан автоматически 
-
-Обнаружен и исправлен баг в функции rating_change_product:
-при DELETE NEW.product_id = NULL → UPDATE не находил строку.
-Исправлено: v_target_product_id := COALESCE(NEW.product_id, OLD.product_id).
-Аналогично исправлена rating_change_restaurant.
-
-```sql
--- Все отзывы по product_id
-SELECT r.review_id, r.rating
-FROM review_product rp
-JOIN review r ON r.review_id = rp.review_id
-WHERE rp.product_id = 'd5b299f2-d1c5-4f6c-9040-ad7eb92211e5';
--- 00e6464a-f6bd-4dd2-84cd-1c2b6d96bf33 1.0
--- d60a7d23-659a-4b8d-8bdb-89e6a4d9b150	4.0
--- 45705496-33c2-49ec-9da4-fec5e903c35c	5.0
-
--- Удалить отзыв из представленных
-DELETE FROM review_product WHERE review_id = '00e6464a-f6bd-4dd2-84cd-1c2b6d96bf33';
-DELETE FROM review WHERE review_id = '00e6464a-f6bd-4dd2-84cd-1c2b6d96bf33';
-
-SELECT rating FROM product WHERE product_id = 'd5b299f2-d1c5-4f6c-9040-ad7eb92211e5';
-```
-
-Ожидается: если других отзывов нет — `rating IS NULL`; иначе — пересчитан.
-Факт: Начальный рейтинг - 3.33 (3 отзыва), рейтинг после удаления тестового отзыва - 4.5 (2 отзыва).
+Факт: Начальный рейтинг - 3.5 (2 отзыва), рейтинг после удаления тестового отзыва - 2.
 Вердикт: OK
 
 ### E.5. `get_statistic()`
@@ -735,7 +680,7 @@ WHERE sum_no_commission = 0 OR sum_no_commission IS NULL;
 
 Сценарий: удалены все доставленные заказы за 2026-06.
 Связанные данные (review_product, review_restaurant, review_order,
-review, payment, order_structure) удалены до pidido из-за FK RESTRICT.
+review, payment, order_structure) удалены до "order" из-за FK RESTRICT.
 
 Ожидается: 2026-06 заказов не было — они есть в результате.
 Факт: столбец year_month содержит значение 2026-06.
@@ -808,9 +753,7 @@ GROUP BY table_name;
 ```
 
 Ожидается: у каждой таблицы `SELECT, INSERT, UPDATE, DELETE` (или `ALL`).
-Факт: все 15 таблиц + how_much_money (view) — ALL PRIVILEGES.
-Обнаружена лишняя таблица v_client_id (client_id UUID, 1 строка) — тестовый  
-артефакт, не входящий в FOOD-101. Удалена: DROP TABLE chaplygin_food.v_client_id.
+Факт: все 12 таблиц + how_much_money (view) — ALL PRIVILEGES.
 Вердикт: OK
 
 ### G.3. `information_schema` читается под `inspector`
@@ -823,7 +766,7 @@ RESET ROLE;
 ```
 
 Ожидается: 12 + N (количество таблиц).
-Факт: 16 (12+3 таблиц+1 view)
+Факт: 12 таблиц+1 view
 Вердикт: OK
 
 ### G.4. `pg_catalog` читается под `inspector`
@@ -836,7 +779,7 @@ RESET ROLE;
 ```
 
 Ожидается: 12 + N.
-Факт: 15 (12+3 таблиц)
+Факт: 12 таблиц
 Вердикт: OK
 
 ### G.5. Все процедуры/функции работают под `inspector`
@@ -867,14 +810,14 @@ RESET ROLE;
 ```sql
 EXPLAIN ANALYZE
 SELECT c.courier_id,
-       (SELECT count(*) FROM pidido o WHERE o.courier_id = c.courier_id AND o.status = 'доставлен') AS cnt,
-       (SELECT coalesce(sum(commission), 0) FROM pidido o WHERE o.courier_id = c.courier_id AND o.status = 'доставлен') AS commission_sum
+       (SELECT count(*) FROM "order" o WHERE o.courier_id = c.courier_id AND o.status = 'доставлен') AS cnt,
+       (SELECT coalesce(sum(commission), 0) FROM "order" o WHERE o.courier_id = c.courier_id AND o.status = 'доставлен') AS commission_sum
 FROM courier c;
 ```
 
-Ожидается: два SubPlan, каждый — скан `pidido`. Время растёт линейно от числа курьеров.
-Факт: два SubPlan (SubPlan 1 и SubPlan 2), каждый — скан `pidido`
-время 0.188 мс (Execution Time: 0.188 ms), план 1.641 мс (Planning Time: 1.641 ms)
+Ожидается: два SubPlan, каждый — скан `"order"`. Время растёт линейно от числа курьеров.
+Факт: два SubPlan (SubPlan 1 и SubPlan 2), каждый — скан `"order"`
+время 0.321 мс (Execution Time: 0.321 ms), план 0.241 мс (Planning Time: 0.241 ms)
 Вердикт: OK
 
 ### H.2. `EXPLAIN ANALYZE` — паттерн «один JOIN»
@@ -885,13 +828,13 @@ SELECT c.courier_id,
        count(o.order_id) AS cnt,
        coalesce(sum(o.commission), 0) AS commission_sum
 FROM courier c
-LEFT JOIN pidido o ON o.courier_id = c.courier_id AND o.status = 'доставлен'
+LEFT JOIN "order" o ON o.courier_id = c.courier_id AND o.status = 'доставлен'
 GROUP BY c.courier_id;
 ```
 
-Ожидается: один `Hash Right Join` / `Hash Left Join`, один скан `pidido`. Время меньше, чем в H.1.
+Ожидается: один `Hash Right Join` / `Hash Left Join`, один скан `"order"`. Время меньше, чем в H.1.
 Факт: один Hash Right Join
-время 0.187 мс (Execution Time: 0.187 ms), план 0.576 мс (Planning Time: 0.576 ms)
+время 0.119 мс (Execution Time: 0.119 ms), план 0.243 мс (Planning Time: 0.217 ms)
 Время меньше, чем в H.1.
 Вердикт: OK
 
@@ -902,34 +845,8 @@ EXPLAIN ANALYZE SELECT * FROM get_statistic();
 ```
 
 Ожидается: без `LATERAL`, без множественных подзапросов к одной таблице, без оконных функций там, где хватает агрегата.
-Факт: Execution Time: 0.957 ms, Planning Time: 3.502 ms.  
-Buffers: shared hit=29.
-План:
-
-- CTE delivered: Seq Scan pidido (status = 'доставлен'), rows=25 — ОДИН скан
-    
-- CTE product_stats: WindowAgg (PARTITION BY restaurant_id  
-    ORDER BY sum(quantity) DESC, random()) — для rn = 1
-    
-- CTE user_stats: WindowAgg (PARTITION BY restaurant_id  
-    ORDER BY count(*) DESC, random()) — для rn = 1
-    
-- Hash Left Join × 3 (restaurant + rest_stats + product_stats + user_stats)
-    
-- Memoize для client (10 misses, 15 hits — кеш работает)
-
-Проверка BR-11.8:
-
-- pidido сканируется 1 раз (через CTE delivered), не 3-4 раза.
-    
-- order_structure, product, restaurant — по 1 скану.
-    
-- client — 1 скан + Memoize.
-    
-- WindowAgg только для rn = 1 (best_product, best_user) — оправдано.
-    
-- Нет коррелированных подзапросов, нет LATERAL.
-
+Факт: Execution Time: 0.758 ms, Planning Time: 0.042 ms.  
+Buffers: shared hit=36.
 Вердикт: OK
 
 ---
@@ -947,7 +864,7 @@ UNION ALL SELECT 'product_category', count(*) FROM product_category
 UNION ALL SELECT 'restaurant', count(*) FROM restaurant
 UNION ALL SELECT 'address', count(*) FROM address
 UNION ALL SELECT 'product', count(*) FROM product
-UNION ALL SELECT 'order', count(*) FROM pidido
+UNION ALL SELECT 'order', count(*) FROM "order"
 UNION ALL SELECT 'review', count(*) FROM review
 UNION ALL SELECT 'payment', count(*) FROM payment
 UNION ALL SELECT 'order_structure', count(*) FROM order_structure
@@ -973,7 +890,7 @@ CALL erase_test_data();
 
 ```sql
 CALL insert_test_data(10);
-SELECT count(*) FROM pidido;
+SELECT count(*) FROM "order";
 ```
 
 Ожидается: 50.

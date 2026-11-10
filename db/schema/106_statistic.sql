@@ -16,7 +16,7 @@ SET search_path = chaplygin_food, exts, public
 AS $$
 WITH delivered AS (
     SELECT o.order_id, o.restaurant_id, o.client_id, o.total_amount
-    FROM pidido o
+    FROM chaplygin_food."order" o
     WHERE o.status = 'доставлен'
 ),
 rest_stats AS (

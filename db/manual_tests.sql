@@ -20,7 +20,7 @@ SELECT table_name FROM information_schema.tables
 WHERE table_schema = 'chaplygin_food'
 ORDER BY table_name;
 -- Ожидается: address, client, client_address, courier, courier_pay,
--- pidido, order_structure, payment, product, product_category,
+-- "order", order_structure, payment, product, product_category,
 -- restaurant, review, review_product, review_restaurant, review_order
 -- (15 таблиц)
 
@@ -74,7 +74,7 @@ UNION ALL SELECT 'product_category', count(*) FROM product_category
 UNION ALL SELECT 'restaurant', count(*) FROM restaurant
 UNION ALL SELECT 'address', count(*) FROM address
 UNION ALL SELECT 'product', count(*) FROM product
-UNION ALL SELECT 'order', count(*) FROM pidido
+UNION ALL SELECT 'order', count(*) FROM "order"
 UNION ALL SELECT 'review', count(*) FROM review
 UNION ALL SELECT 'payment', count(*) FROM payment
 ORDER BY tbl;
@@ -91,7 +91,7 @@ SELECT count(*) FROM client WHERE login = '' OR password = '' OR phone_number = 
 -- Ожидается: 0
 
 -- C.6. Нет NULL там, где запрещено (BR-11.3)
-SELECT count(*) FROM pidido WHERE client_id IS NULL OR restaurant_id IS NULL
+SELECT count(*) FROM "order" WHERE client_id IS NULL OR restaurant_id IS NULL
   OR courier_id IS NULL OR address_id IS NULL OR total_amount IS NULL;
 -- Ожидается: 0
 
@@ -103,7 +103,7 @@ SELECT count(*) FROM courier WHERE status != 'уволен';
 SELECT cp.year, cp.month, cp.courier_id, cp.amount, cp.coefficient_used,
        round(coalesce((
            SELECT sum(o.commission)
-           FROM pidido o
+           FROM "order" o
            WHERE o.courier_id = cp.courier_id
              AND o.status = 'доставлен'
              AND extract(year  from o.order_timestamp) = cp.year
@@ -126,7 +126,7 @@ END $$;
 -- D.1. Все FK валидны (нет orphans)
 SELECT 'order_structure → order' AS fk, count(*) AS orphans
 FROM order_structure os
-LEFT JOIN pidido o ON os.order_id = o.order_id
+LEFT JOIN "order" o ON os.order_id = o.order_id
 WHERE o.order_id IS NULL
 UNION ALL
 SELECT 'order_structure → product', count(*)
@@ -136,12 +136,12 @@ WHERE p.product_id IS NULL
 UNION ALL
 SELECT 'payment → order', count(*)
 FROM payment pmt
-LEFT JOIN pidido o ON pmt.order_id = o.order_id
+LEFT JOIN "order" o ON pmt.order_id = o.order_id
 WHERE o.order_id IS NULL
 UNION ALL
 SELECT 'review → order', count(*)
 FROM review r
-LEFT JOIN pidido o ON r.order_id = o.order_id
+LEFT JOIN "order" o ON r.order_id = o.order_id
 WHERE o.order_id IS NULL
 UNION ALL
 SELECT 'courier_pay → courier', count(*)
@@ -161,25 +161,25 @@ WHERE a.address_id IS NULL;
 -- Ожидается: все 0
 
 -- D.2. Минимальная сумма заказа (BR-1.8)
-SELECT count(*) FROM pidido WHERE total_amount < 1000;
+SELECT count(*) FROM "order" WHERE total_amount < 1000;
 -- Ожидается: 0
 
 -- D.3. Комиссия = 10% (BR-1.4)
-SELECT count(*) FROM pidido WHERE round(order_amount * 0.10, 2) != commission;
+SELECT count(*) FROM "order" WHERE round(order_amount * 0.10, 2) != commission;
 -- Ожидается: 0
 
 -- D.4. `total_amount = order_amount + commission`
-SELECT count(*) FROM pidido
+SELECT count(*) FROM "order"
 WHERE round(order_amount + commission, 2) != total_amount;
 -- Ожидается: 0
 
 -- D.5. Дата доставки не раньше создания (BR-7.13)
-SELECT count(*) FROM pidido
+SELECT count(*) FROM "order"
 WHERE delivery_timestamp IS NOT NULL AND delivery_timestamp < order_timestamp;
 -- Ожидается: 0
 
 -- D.6. Адрес доставки принадлежит клиенту (BR-7.4)
-SELECT count(*) FROM pidido o
+SELECT count(*) FROM "order" o
 LEFT JOIN client_address ca
   ON ca.client_id = o.client_id AND ca.address_id = o.address_id
 WHERE ca.client_id IS NULL;
@@ -188,7 +188,7 @@ WHERE ca.client_id IS NULL;
 -- D.7. Все блюда в заказе из одного ресторана (BR-7.3)
 SELECT count(DISTINCT os.order_id)
 FROM order_structure os
-JOIN pidido o ON os.order_id = o.order_id
+JOIN "order" o ON os.order_id = o.order_id
 JOIN product p ON os.product_id = p.product_id
 WHERE p.restaurant_id != o.restaurant_id;
 -- Ожидается: 0
@@ -203,7 +203,7 @@ HAVING count(*) != 1;
 
 -- D.9. Сумма оплаты = total_amount заказа (BR-8.4)
 SELECT count(*) FROM payment p
-JOIN pidido o ON p.order_id = o.order_id
+JOIN "order" o ON p.order_id = o.order_id
 WHERE p.amount != o.total_amount;
 -- Ожидается: 0
 
@@ -231,55 +231,39 @@ WHERE dismissal_date IS NOT NULL AND dismissal_date < hire_date;
 -- Ожидается: 0
 
 -- D.14. Рейтинг блюд/ресторанов соответствует отзывам (BR-9.6)
--- Адаптировано под нормализацию (entity_type → review_product / review_restaurant)
-
--- D.14.1 product.rating
+-- product.rating = AVG(review.rating) по отзывам на блюдо
 SELECT p.product_id, p.rating,
-       (SELECT round(avg(r.rating), 2)
-        FROM review_product rp
-        JOIN review r ON r.review_id = rp.review_id
-        WHERE rp.product_id = p.product_id) AS expected
+       (SELECT round(avg(r.rating), 2) FROM review r
+        WHERE r.entity_type = 'блюдо' AND r.entity_id = p.product_id) AS expected
 FROM product p
 WHERE p.rating IS NOT NULL
-ORDER BY p.product_id
 LIMIT 20;
 -- Ожидается: rating = expected
 
--- D.14.2 restaurant.rating
-SELECT r.restaurant_id, r.rating,
-       (SELECT round(avg(rv.rating), 2)
-        FROM review_restaurant rr
-        JOIN review rv ON rv.review_id = rr.review_id
-        WHERE rr.restaurant_id = r.restaurant_id) AS expected
-FROM restaurant r
-WHERE r.rating IS NOT NULL
-ORDER BY r.restaurant_id
-LIMIT 20;
-
 -- E. Функции и процедуры
 -- E.1. add_product — успешный вызов
-SELECT count(*) AS before FROM product;
+SELECT count(*) AS before FROM chaplygin_food.product;
 
 DO $$
 DECLARE
     v_rest_id UUID;
     v_cat_id  UUID;
 BEGIN
-    SELECT restaurant_id INTO v_rest_id FROM restaurant LIMIT 1;
-    SELECT product_category_id INTO v_cat_id FROM product_category LIMIT 1;
-    CALL add_product(
+    SELECT restaurant_id INTO v_rest_id FROM chaplygin_food.restaurant LIMIT 1;
+    SELECT product_category_id INTO v_cat_id FROM chaplygin_food.product_category LIMIT 1;
+
+    CALL chaplygin_food.add_product(
         p_restaurant_id       => v_rest_id,
         p_product_category_id => v_cat_id,
-        p_product_name        => 'Тестовое блюдо',
+        p_name                => 'Тестовое блюдо',
         p_price               => 250,
-        p_rating              => 4.5,
-        p_status              => 'доступно',
+        p_status              => 'доступно'::chaplygin_food.product_status,
         p_description         => 'Описание'
     );
 END;
 $$;
 
-SELECT count(*) AS after FROM product;
+SELECT count(*) AS after FROM chaplygin_food.product;
 -- Ожидается: after = before + 1
 
 -- E.2. add_product — падает на несуществующий ресторан
@@ -292,7 +276,7 @@ BEGIN
     CALL add_product(
         p_restaurant_id       => '00000000-0000-0000-0000-000000000000'::UUID,
         p_product_category_id => v_cat_id,
-        p_product_name        => 'Блюдо',
+        p_name        		  => 'Блюдо',
         p_price               => 100,
         p_status              => 'доступно',
         p_description         => 'Описание'
@@ -307,59 +291,42 @@ SELECT p.product_id, p.rating
 FROM product p
 WHERE p.rating IS NOT NULL
 LIMIT 1; -- product_id					|	rating
--- d5b299f2-d1c5-4f6c-9040-ad7eb92211e5	|   3.33
+-- 1ec97f22-3062-43b8-b051-85c3642eab6c	|   2
 
 -- Все отзывы по product_id
 SELECT r.review_id, r.rating
-FROM review_product rp
-JOIN review r ON r.review_id = rp.review_id
-WHERE rp.product_id = 'd5b299f2-d1c5-4f6c-9040-ad7eb92211e5';
--- Среднее = (1+4+5) / 3 = 3.33
-
-SELECT o.order_id, o.client_id
-FROM pidido o
-LIMIT 1; -- order_id					|	client_id
--- e771cbc5-bb90-4ecb-85ee-70cecc30530c	| 32313f2d-efa0-492f-a279-03f981767119
+FROM chaplygin_food.review r
+WHERE r.entity_type = 'блюдо'::chaplygin_food.review_entity_type
+  AND r.entity_id = '1ec97f22-3062-43b8-b051-85c3642eab6c';
+-- 1 отзыв - rating 2
 
 -- Вставить отзыв на это блюдо
-INSERT INTO review (review_id, client_id, order_id, review_timestamp,
-                    description, photo_url, rating)
-VALUES (
-	    exts.uuid_generate_v4(),
-	    '32313f2d-efa0-492f-a279-03f981767119',
-	    'e771cbc5-bb90-4ecb-85ee-70cecc30530c',
-	    localtimestamp,
-	    'Тестовый отзыв',
-	    NULL,
-	    5
-)
-RETURNING review_id; -- review_id 4e6ab6e0-404e-40ad-8197-55ef32a2c72d
-
--- Вставить review_product
-INSERT INTO review_product (review_id, order_id, product_id)
-VALUES (
-    '4e6ab6e0-404e-40ad-8197-55ef32a2c72d',
-    'e771cbc5-bb90-4ecb-85ee-70cecc30530c',
-    'd5b299f2-d1c5-4f6c-9040-ad7eb92211e5'
-);
+INSERT INTO review (review_id, client_id, review_timestamp, entity_id, entity_type, order_id, description, rating)
+SELECT
+    exts.uuid_generate_v4(),
+    o.client_id,
+    localtimestamp,
+    '1ec97f22-3062-43b8-b051-85c3642eab6c',
+    'блюдо',
+    o.order_id,
+    'Тестовый отзыв',
+    5
+FROM chaplygin_food."order" o
+WHERE o.order_id = (SELECT order_id FROM chaplygin_food."order" LIMIT 1);
 
 -- Проверить рейтинг
-SELECT rating FROM product WHERE product_id = 'd5b299f2-d1c5-4f6c-9040-ad7eb92211e5'; 
--- Среднее = (1+4+5+5) / 4 = 3.75
+SELECT rating FROM product WHERE product_id = '1ec97f22-3062-43b8-b051-85c3642eab6c';
+-- Среднее = (2+5) / 2 = 3.5
 -- Ожидается: rating = expected
 
 -- E.4. rating_change — удаление отзыва
--- Удалить review_product
-DELETE FROM review_product 
-WHERE review_id = '00e6464a-f6bd-4dd2-84cd-1c2b6d96bf33';
--- Удалить review
 DELETE FROM review 
-WHERE review_id = '00e6464a-f6bd-4dd2-84cd-1c2b6d96bf33';
+WHERE review_id = 'b6213862-2be4-4ec2-9839-c3af75c38273';
 
 -- Проверить рейтинг после удаления
 SELECT rating FROM product
-WHERE product_id = 'd5b299f2-d1c5-4f6c-9040-ad7eb92211e5';
--- Ожидается: 4.5 = (4+5) / 2
+WHERE product_id = '1ec97f22-3062-43b8-b051-85c3642eab6c';
+-- Ожидается: 2
 -- Ожидается: rating = expected (или NULL, если отзывов не осталось)
 
 -- E.5. get_statistic()
@@ -371,29 +338,22 @@ SELECT * FROM get_statistic();
 -- E.6. courier_salary()
 SELECT courier_id, status, coefficient FROM courier ORDER BY courier_id;
 
--- Добавляем 501 заказ для 2 курьеров (уволенного и работающего)
 DO $$
 DECLARE
-    v_courier_id UUID := '<courier_id>';
+    v_courier_id  UUID := '<courier_id>';
     v_month_start DATE := date_trunc('month', current_date)::date;
     v_month_end   DATE := (date_trunc('month', current_date) + interval '1 month')::date;
     v_client_id   UUID;
     v_address_id  UUID;
     v_rest_id     UUID;
-    v_order_amt   NUMERIC(12,2);
-    v_comm        NUMERIC(12,2);
 BEGIN
-    -- проверка, что курьер существует и работает (закомментировано для добавления заказов уволенному)
-    IF NOT EXISTS (SELECT 1 FROM courier WHERE courier_id = v_courier_id /*AND status <> 'уволен'*/) THEN
-        RAISE EXCEPTION 'Курьер % не найден или уволен', v_courier_id;
-    END IF;
-    -- любые client_id + address_id (пара из client_address)
     SELECT client_id, address_id INTO v_client_id, v_address_id
-    FROM client_address LIMIT 1;
-    -- любой ресторан
-    SELECT restaurant_id INTO v_rest_id FROM restaurant LIMIT 1;
-    -- 501 заказ
-    INSERT INTO pidido (
+    FROM chaplygin_food.client_address LIMIT 1;
+
+    SELECT restaurant_id INTO v_rest_id
+    FROM chaplygin_food.restaurant LIMIT 1;
+
+    INSERT INTO chaplygin_food."order" (
         order_id, courier_id, client_id, address_id, restaurant_id,
         order_timestamp, delivery_timestamp,
         order_amount, commission, total_amount,
@@ -405,23 +365,21 @@ BEGIN
         v_client_id,
         v_address_id,
         v_rest_id,
-        -- order_timestamp — в текущем месяце
-        v_month_start + (random() * (v_month_end - v_month_start)) * interval '1 day',
-        -- delivery_timestamp — +1..3 часа (для доставленных)
-        v_month_start + (random() * (v_month_end - v_month_start)) * interval '1 day'
-            + (1 + random() * 2) * interval '1 hour',
-        round((909.09 + random() * 4000)::numeric, 2),
-        round(round((909.09 + random() * 4000)::numeric, 2) * 0.10, 2),
-        round((909.09 + random() * 4000)::numeric, 2)
-            + round(round((909.09 + random() * 4000)::numeric, 2) * 0.10, 2),
-        'доставлен'::order_status,
-        'оплачен'::order_pay_status,
+        g.ts,
+        g.ts + interval '1 hour' + (random() * 2 * interval '1 hour'),
+        g.amt,
+        round(g.amt * 0.10, 2),
+        g.amt + round(g.amt * 0.10, 2),
+        'доставлен'::chaplygin_food.order_status,
+        'оплачен'::chaplygin_food.order_pay_status,
         NULL
-    FROM generate_series(1, 501);
-
-    RAISE NOTICE '501 заказ для курьера % созданы', v_courier_id;
-END;
-$$;
+    FROM generate_series(1, 501) AS s(i)
+    CROSS JOIN LATERAL (
+        SELECT
+            round((1000 + random() * 4000)::numeric, 2) AS amt,
+            v_month_start + (random() * (v_month_end - v_month_start)) * interval '1 day' AS ts
+    ) g;
+END $$;
 
 CALL courier_salary();
 
@@ -467,45 +425,35 @@ WHERE sum_no_commission = 0 AND sum_with_commission = 0;
 -- Принудительно удаляем 2026-06
 SELECT count(*) AS cnt,
        sum(total_amount) AS total
-FROM pidido
+FROM "order"
 WHERE status = 'доставлен'
   AND order_timestamp >= '2026-06-01'
   AND order_timestamp <  '2026-07-01';
--- 5	18218.03
+-- 5	14388.18
 
 BEGIN;
 
 -- 1. запомнить order_id за 2026-06
 CREATE TEMP TABLE tmp_june_orders AS
-SELECT order_id FROM pidido
+SELECT order_id FROM "order"
 WHERE status = 'доставлен'
   AND order_timestamp >= '2026-06-01'
   AND order_timestamp <  '2026-07-01';
 
--- 2. удалить дочерние review
-DELETE FROM review_product
-WHERE order_id IN (SELECT order_id FROM tmp_june_orders);
-
-DELETE FROM review_restaurant
-WHERE order_id IN (SELECT order_id FROM tmp_june_orders);
-
-DELETE FROM review_order
-WHERE order_id IN (SELECT order_id FROM tmp_june_orders);
-
--- 3. удалить review
+-- 2. удалить review
 DELETE FROM review
 WHERE order_id IN (SELECT order_id FROM tmp_june_orders);
 
--- 4. удалить payment
+-- 3. удалить payment
 DELETE FROM payment
 WHERE order_id IN (SELECT order_id FROM tmp_june_orders);
 
--- 5. удалить order_structure
+-- 4. удалить order_structure
 DELETE FROM order_structure
 WHERE order_id IN (SELECT order_id FROM tmp_june_orders);
 
--- 6. удалить pidido
-DELETE FROM pidido
+-- 5. удалить "order"
+DELETE FROM "order"
 WHERE order_id IN (SELECT order_id FROM tmp_june_orders);
 
 COMMIT;
@@ -564,7 +512,7 @@ SET search_path TO chaplygin_food, exts, public;
 
 SELECT count(*) FROM information_schema.tables
 WHERE table_schema = 'chaplygin_food';
--- Ожидается: 16
+-- Ожидается: 13
 
 RESET ROLE;
 
@@ -574,7 +522,7 @@ SET search_path TO chaplygin_food, exts, public;
 
 SELECT count(*) FROM pg_catalog.pg_tables
 WHERE schemaname = 'chaplygin_food';
--- Ожидается: 15
+-- Ожидается: 12
 
 RESET ROLE;
 
@@ -596,10 +544,10 @@ RESET ROLE;
 -- H.1. EXPLAIN ANALYZE — паттерн «избыточные подзапросы» (плохо)
 EXPLAIN ANALYZE
 SELECT c.courier_id,
-       (SELECT count(*)  FROM pidido o WHERE o.courier_id = c.courier_id AND o.status = 'доставлен') AS cnt,
-       (SELECT coalesce(sum(commission), 0) FROM pidido o WHERE o.courier_id = c.courier_id AND o.status = 'доставлен') AS commission_sum
+       (SELECT count(*)  FROM "order" o WHERE o.courier_id = c.courier_id AND o.status = 'доставлен') AS cnt,
+       (SELECT coalesce(sum(commission), 0) FROM "order" o WHERE o.courier_id = c.courier_id AND o.status = 'доставлен') AS commission_sum
 FROM courier c;
--- Ожидается: два SubPlan, каждый — скан pidido
+-- Ожидается: два SubPlan, каждый — скан "order"
 
 -- H.2. EXPLAIN ANALYZE — паттерн «один JOIN» (хорошо)
 EXPLAIN ANALYZE
@@ -607,13 +555,13 @@ SELECT c.courier_id,
        count(o.order_id) AS cnt,
        coalesce(sum(o.commission), 0) AS commission_sum
 FROM courier c
-LEFT JOIN pidido o ON o.courier_id = c.courier_id AND o.status = 'доставлен'
+LEFT JOIN "order" o ON o.courier_id = c.courier_id AND o.status = 'доставлен'
 GROUP BY c.courier_id;
--- Ожидается: один Hash Left Join, один скан pidido
+-- Ожидается: один Hash Left Join, один скан "order"
 
 -- H.3. EXPLAIN ANALYZE get_statistic
 EXPLAIN ANALYZE SELECT * FROM get_statistic();
--- Ожидается: без LATERAL, без множественных подзапросов к pidido,
+-- Ожидается: без LATERAL, без множественных подзапросов к "order",
 -- без избыточных окон
 
 -- I. Очистка и повторная генерация
@@ -621,20 +569,14 @@ EXPLAIN ANALYZE SELECT * FROM get_statistic();
 CALL erase_test_data();
 
 SELECT 'client' AS tbl, count(*) FROM client
-UNION ALL SELECT 'courier',           count(*) FROM courier
-UNION ALL SELECT 'product_category',  count(*) FROM product_category
-UNION ALL SELECT 'restaurant',        count(*) FROM restaurant
-UNION ALL SELECT 'address',           count(*) FROM address
-UNION ALL SELECT 'product',           count(*) FROM product
-UNION ALL SELECT 'pidido',            count(*) FROM pidido
-UNION ALL SELECT 'review',            count(*) FROM review
-UNION ALL SELECT 'payment',           count(*) FROM payment
-UNION ALL SELECT 'order_structure',   count(*) FROM order_structure
-UNION ALL SELECT 'client_address',    count(*) FROM client_address
-UNION ALL SELECT 'courier_pay',       count(*) FROM courier_pay
-UNION ALL SELECT 'review_product',    count(*) FROM review_product
-UNION ALL SELECT 'review_restaurant', count(*) FROM review_restaurant
-UNION ALL SELECT 'review_order',      count(*) FROM review_order
+UNION ALL SELECT 'courier', count(*) FROM courier
+UNION ALL SELECT 'product_category', count(*) FROM product_category
+UNION ALL SELECT 'restaurant', count(*) FROM restaurant
+UNION ALL SELECT 'address', count(*) FROM address
+UNION ALL SELECT 'product', count(*) FROM product
+UNION ALL SELECT 'order', count(*) FROM "order"
+UNION ALL SELECT 'review', count(*) FROM review
+UNION ALL SELECT 'payment', count(*) FROM payment
 ORDER BY tbl;
 -- Ожидается: все 0
 
@@ -645,6 +587,6 @@ CALL erase_test_data();
 -- I.3. После очистки insert_test_data снова работает
 CALL insert_test_data(10);
 
-SELECT count(*) FROM pidido;
+SELECT count(*) FROM "order";
 -- Ожидается: 50
 

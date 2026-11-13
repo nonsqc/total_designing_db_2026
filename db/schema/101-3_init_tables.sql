@@ -32,7 +32,9 @@ CREATE TABLE chaplygin_food.restaurant (
     description TEXT NOT NULL CHECK (LENGTH(trim(description)) > 0),
     work_start TIME NOT NULL,
     work_end TIME NOT NULL,
-    company_details TEXT NOT NULL CHECK (LENGTH(trim(company_details)) > 0),
+    legal_name VARCHAR(100) NOT NULL CHECK (LENGTH(trim(legal_name)) > 0),
+	inn VARCHAR(12) NOT NULL CHECK (inn ~ '^[0-9]{10,12}$'),
+	bank_account VARCHAR(20) NOT NULL CHECK (bank_account ~ '^[0-9]{20}$'),
     rating NUMERIC(3,2) DEFAULT NULL CHECK (rating IS NULL OR rating BETWEEN 0 AND 5),
     status chaplygin_food.restaurant_status NOT NULL,
     CHECK (work_end > work_start)
@@ -62,7 +64,10 @@ CREATE TABLE chaplygin_food.product (
 --BR-6.* Курьеры
 CREATE TABLE chaplygin_food.courier (
     courier_id UUID PRIMARY KEY DEFAULT exts.uuid_generate_v4(),
-    fio VARCHAR(150) NOT NULL CHECK (LENGTH(trim(fio)) > 0),
+    last_name VARCHAR(50) NOT NULL CHECK (LENGTH(trim(last_name)) > 0),
+	first_name VARCHAR(50) NOT NULL CHECK (LENGTH(trim(first_name)) > 0),
+	middle_name VARCHAR(50) NOT NULL CHECK (LENGTH(trim(middle_name)) > 0),
+	fio VARCHAR(152) GENERATED ALWAYS AS (last_name || ' ' || first_name || ' ' || middle_name) STORED,
     phone_number CHAR(12) NOT NULL UNIQUE CHECK (phone_number ~ '^\+7[0-9]{10}$'),
     status chaplygin_food.courier_status NOT NULL CHECK ((status = 'уволен' AND dismissal_date IS NOT NULL)
        													OR (status <> 'уволен' AND dismissal_date IS NULL)),

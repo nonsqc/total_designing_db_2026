@@ -3,7 +3,7 @@
 SET search_path TO chaplygin_food, exts, public
 
 -- 1. Функции
-CREATE OR REPLACE FUNCTION chaplygin_food.rating_change_review()
+CREATE OR REPLACE FUNCTION chaplygin_food.rating_change()
 RETURNS TRIGGER
 LANGUAGE plpgsql AS $$
 DECLARE
@@ -53,7 +53,7 @@ BEGIN
 END;
 $$;
 
-CREATE TRIGGER trg_rating_change_review
+CREATE TRIGGER trg_rating_change
     AFTER INSERT OR UPDATE OR DELETE ON chaplygin_food.review
     FOR EACH ROW 
-    EXECUTE FUNCTION chaplygin_food.rating_change_review();
+    EXECUTE FUNCTION chaplygin_food.rating_change();

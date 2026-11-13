@@ -57,20 +57,18 @@ BEGIN
 	    v_id := exts.uuid_generate_v4();
         v_status := (enum_range(NULL::chaplygin_food.courier_status))[1 + floor(random() * 4)::int];
         v_hire := current_date - (floor(random() * 180))::int;
-    	INSERT INTO chaplygin_food.courier(courier_id, fio, phone_number, 
-    					status, hire_date, dismissal_date, coefficient)
+    	INSERT INTO chaplygin_food.courier(courier_id, last_name, first_name, middle_name,
+    				phone_number, status, hire_date, dismissal_date, coefficient)
         VALUES (
             v_id,
             (SELECT string_agg(substring('абвгдеёжзийклмнопрстуфхцчшщъыьэюя', 
-            1 + floor(random() * 33)::int, 1), '')
-             FROM generate_series(1, 8))
-            || ' ' ||
+            							1 + floor(random() * 33)::int, 1), '')
+             FROM generate_series(1, 8)),
             (SELECT string_agg(substring('абвгдеёжзийклмнопрстуфхцчшщъыьэюя', 
-            1 + floor(random() * 33)::int, 1), '')
-             FROM generate_series(1, 6))
-            || ' ' ||
+            							1 + floor(random() * 33)::int, 1), '')
+             FROM generate_series(1, 6)),
             (SELECT string_agg(substring('абвгдеёжзийклмнопрстуфхцчшщъыьэюя', 
-            1 + floor(random() * 33)::int, 1), '')
+            							1 + floor(random() * 33)::int, 1), '')
              FROM generate_series(1, 10)),
             '+7' || lpad((7000000000 + floor(random() * 1000000000))::bigint::text, 10, '0'),
 			v_status, v_hire,
@@ -117,20 +115,26 @@ BEGIN
         INSERT INTO chaplygin_food.restaurant (
             restaurant_id, restaurant_name, address_id,
             description, work_start, work_end,
-            company_details, rating, status)
+            legal_name, inn, bank_account, rating, status)
         VALUES (
             v_id,
             'Ресторан ' || (SELECT string_agg(substring('абвгдеёжзийклмнопрстуфхцчшщъыьэюя', 
-            								1 + floor(random() * 33)::int, 1), '') FROM generate_series(1, 10)),
+            											1 + floor(random() * 33)::int, 1), '')
+                            FROM generate_series(1, 10)),
             v_addresses[i],
             (SELECT string_agg(substring('абвгдеёжзийклмнопрстуфхцчшщъыьэюя', 
-            					1 + floor(random() * 33)::int, 1), '') FROM generate_series(1, 20)),
+            							1 + floor(random() * 33)::int, 1), '')
+             FROM generate_series(1, 20)),
             v_work_start,
             v_work_end,
-            'Реквизиты ' || (SELECT string_agg(substring('абвгдеёжзийклмнопрстуфхцчшщъыьэюя', 
-            									1 + floor(random() * 33)::int, 1), '') FROM generate_series(1, 10)),
+            'ООО «' || (SELECT string_agg(substring('абвгдеёжзийклмнопрстуфхцчшщъыьэюя', 1 + floor(random() * 33)::int, 1), '')
+                        FROM generate_series(1, 10)) || '»',
+            lpad((floor(random() * 1000000000000))::bigint::text, 12, '0'),
+            lpad((floor(random() * 1000000000)::bigint)::text, 10, '0')
+			|| lpad((floor(random() * 1000000000)::bigint)::text, 10, '0'),
             NULL,
-            CASE WHEN random() < 0.7 THEN 'активен'::restaurant_status ELSE 'неактивен'::restaurant_status END
+            CASE WHEN random() < 0.7 THEN 'активен'::restaurant_status
+                 ELSE 'неактивен'::restaurant_status END
         );
         v_restaurant_ids := array_append(v_restaurant_ids, v_id);
     END LOOP;

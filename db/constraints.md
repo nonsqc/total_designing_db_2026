@@ -68,42 +68,46 @@
 
 Каждое — с ссылкой на BR.
 
-| Таблица | Столбец | Условие | BR | Обоснование |
-|---|---|---|---|---|
-| client | login | LENGTH(trim(login)) > 0 | BR-11.3 | Логин не может быть пустым |
-| client | password | password ~ '^[0-9a-f]{32}$' | BR-2.3 | Пароль — MD5-хэш (32 hex-символа) |
-| client | phone_number | phone_number ~ '^\+7[0-9]{10}$' | BR-2.1 | Телефон в формате +7XXXXXXXXXX |
-| address | street | LENGTH(trim(street)) > 0 | BR-3.1, BR-11.3 | Улица обязательна |
-| address | house_number | LENGTH(trim(house_number)) > 0 | BR-3.1, BR-11.3 | Номер дома обязателен |
-| address | apartment_office | IS NULL OR LENGTH(trim(...)) > 0 | BR-3.2 | Квартира/офис необязательна, но не пустая строка |
-| restaurant | rating | IS NULL OR BETWEEN 0 AND 5 | BR-4.2, BR-9.6 | Рейтинг от 0 до 5, NULL без отзывов |
-| restaurant | work_start, work_end | work_end > work_start | BR-4.4 | Время закрытия позже открытия |
-| restaurant | restaurant_name | LENGTH(trim(...)) > 0 | BR-4.1, BR-11.3 | Название обязательно |
-| restaurant | description | LENGTH(trim(...)) > 0 | BR-4.1 | Пустая строка — не описание |
-| restaurant | company_details | LENGTH(trim(...)) > 0 | BR-4.5 | Реквизиты обязательны |
-| product_category | product_category_name | LENGTH(trim(...)) > 0 | BR-5.7, BR-11.3 | Название категории обязательно |
-| product | price | price >= 0 | BR-5.3 | Цена неотрицательна |
-| product | rating | IS NULL OR BETWEEN 0 AND 5 | BR-5.4, BR-9.6 | Рейтинг от 0 до 5, NULL без отзывов |
-| product | product_name | LENGTH(trim(...)) > 0 | BR-5.2, BR-11.3 | Название обязательно |
-| product | description | LENGTH(trim(...)) > 0 | BR-5.2 | Описание обязательно |
-| courier | coefficient | BETWEEN 0.1 AND 0.5 | BR-6.4 | Коэффициент от 0.1 до 0.5 |
-| courier | status, dismissal_date | (status = 'уволен' AND dismissal_date IS NOT NULL) OR (status <> 'уволен' AND dismissal_date IS NULL) | BR-6.3 | Уволенный обязан иметь дату, работающий — не имеет |
-| courier | dismissal_date, hire_date | dismissal_date IS NULL OR dismissal_date >= hire_date | BR-6.3 | Дата увольнения не раньше найма |
-| courier | fio | LENGTH(trim(...)) > 0 | BR-6.1, BR-11.3 | ФИО обязательно |
-| courier | phone_number | phone_number ~ '^\+7[0-9]{10}$' | BR-6.1 | Формат телефона |
-| "order" | commission | commission = round(order_amount * 0.10, 2) | BR-1.4, BR-7.10 | Комиссия = 10% от суммы без комиссии |
-| "order" | total_amount | total_amount = order_amount + commission | BR-7.10 | Общая сумма = сумма + комиссия |
-| "order" | total_amount | total_amount >= 1000 | BR-1.8, BR-7.11 | Минимальная сумма заказа 1000 ₽ |
-| "order" | delivery_timestamp | IS NULL OR delivery_timestamp >= order_timestamp | BR-7.13 | Время окончания не раньше создания |
-| "order" | status, delivery_timestamp | (status = 'доставлен' AND delivery_timestamp IS NOT NULL) OR (status <> 'доставлен') | BR-7.12 | Время окончания заполняется при статусе «доставлен» |
-| order_structure | quantity | quantity > 0 | BR-7.15 | Количество положительное |
-| payment | amount | amount >= 0 | BR-8.2 | Сумма попытки неотрицательна |
-| review | rating | rating BETWEEN 1 AND 5 | BR-9.4 | Рейтинг отзыва от 1 до 5 |
-| review | description | LENGTH(trim(...)) > 0 | BR-9.3, BR-11.3 | Текст отзыва обязателен |
-| courier_pay | month | month BETWEEN 1 AND 12 | — | Календарная логика |
-| courier_pay | year | year BETWEEN 2020 AND 2100 | BR-10.2 | Разумный горизонт |
-| courier_pay | amount | amount >= 0 | BR-10.4 | Сумма зарплаты неотрицательна |
-| courier_pay | coefficient_used | BETWEEN 0.1 AND 0.5 | BR-6.4 | Применённый коэффициент из диапазона |
+| Таблица          | Столбец                    | Условие                                                                                               | BR              | Обоснование                                                                                                         |
+| ---------------- | -------------------------- | ----------------------------------------------------------------------------------------------------- | --------------- | ------------------------------------------------------------------------------------------------------------------- |
+| client           | login                      | LENGTH(trim(login)) > 0                                                                               | BR-11.3         | Логин не может быть пустым                                                                                          |
+| client           | password                   | password ~ '^[0-9a-f]{32}$'                                                                           | BR-2.3          | Пароль — MD5-хэш (32 hex-символа)                                                                                   |
+| client           | phone_number               | phone_number ~ '^+7[0-9]{10}$'                                                                        | BR-2.1          | Телефон в формате +7XXXXXXXXXX                                                                                      |
+| address          | street                     | LENGTH(trim(street)) > 0                                                                              | BR-3.1, BR-11.3 | Улица обязательна                                                                                                   |
+| address          | house_number               | LENGTH(trim(house_number)) > 0                                                                        | BR-3.1, BR-11.3 | Номер дома обязателен                                                                                               |
+| address          | apartment_office           | IS NULL OR LENGTH(trim(...)) > 0                                                                      | BR-3.2          | Квартира/офис необязательна, но пустая строка — не NULL                                                             |
+| restaurant       | restaurant_name            | LENGTH(trim(...)) > 0                                                                                 | BR-4.1, BR-11.3 | Название обязательно                                                                                                |
+| restaurant       | description                | LENGTH(trim(...)) > 0                                                                                 | BR-4.1          | У ресторана есть описание; пустая строка — не описание                                                              |
+| restaurant       | legal_name                 | LENGTH(trim(...)) > 0                                                                                 | BR-4.5          | Юридическое название обязательно (1НФ: вынесено из company_details)                                                 |
+| restaurant       | inn                        | inn ~ '^[0-9]{10,12}$'                                                                                | BR-4.5          | ИНН — 10 (юрлицо) или 12 (ИП) цифр (1НФ: вынесено из company_details)                                               |
+| restaurant       | bank_account               | bank_account ~ '^[0-9]{20}$'                                                                          | BR-4.5          | Расчётный счёт — 20 цифр (1НФ: вынесено из company_details)                                                         |
+| restaurant       | rating                     | IS NULL OR BETWEEN 0 AND 5                                                                            | BR-4.2, BR-9.6  | Рейтинг от 0 до 5, NULL при отсутствии отзывов                                                                      |
+| restaurant       | work_start, work_end       | work_end > work_start                                                                                 | BR-4.4          | Время закрытия позже открытия                                                                                       |
+| product_category | product_category_name      | LENGTH(trim(...)) > 0                                                                                 | BR-5.7, BR-11.3 | Название категории обязательно                                                                                      |
+| product          | product_name               | LENGTH(trim(...)) > 0                                                                                 | BR-5.2, BR-11.3 | Название обязательно                                                                                                |
+| product          | price                      | price >= 0                                                                                            | BR-5.3          | Цена неотрицательна                                                                                                 |
+| product          | rating                     | IS NULL OR BETWEEN 0 AND 5                                                                            | BR-5.4, BR-9.6  | Рейтинг от 0 до 5, NULL при отсутствии отзывов                                                                      |
+| product          | description                | LENGTH(trim(...)) > 0                                                                                 | BR-5.2, BR-11.3 | Описание обязательно                                                                                                |
+| courier          | last_name                  | LENGTH(trim(...)) > 0                                                                                 | BR-6.1, BR-11.3 | Фамилия обязательна (1НФ: вынесено из fio)                                                                          |
+| courier          | first_name                 | LENGTH(trim(...)) > 0                                                                                 | BR-6.1, BR-11.3 | Имя обязательно (1НФ: вынесено из fio)                                                                              |
+| courier          | middle_name                | LENGTH(trim(...)) > 0                                                                                 | BR-6.1, BR-11.3 | Отчество обязательно (1НФ: вынесено из fio)                                                                         |
+| courier          | phone_number               | phone_number ~ '^+7[0-9]{10}$'                                                                        | BR-6.1          | Телефон в формате +7XXXXXXXXXX                                                                                      |
+| courier          | status, dismissal_date     | (status = 'уволен' AND dismissal_date IS NOT NULL) OR (status <> 'уволен' AND dismissal_date IS NULL) | BR-6.3          | BR-6.3: уволенный обязан иметь дату. Ужесточено до XOR — состояние «работает, но уволен» семантически противоречиво |
+| courier          | dismissal_date, hire_date  | dismissal_date IS NULL OR dismissal_date >= hire_date                                                 | BR-6.3          | Дата увольнения не раньше найма                                                                                     |
+| courier          | coefficient                | BETWEEN 0.1 AND 0.5                                                                                   | BR-6.4          | Коэффициент от 0.1 до 0.5 включительно                                                                              |
+| order            | commission                 | commission = round(order_amount * 0.10, 2)                                                            | BR-1.4, BR-7.10 | Комиссия = 10% от суммы без комиссии                                                                                |
+| order            | total_amount               | total_amount = order_amount + commission                                                              | BR-7.10         | Общая сумма = сумма без комиссии + комиссия                                                                         |
+| order            | total_amount               | total_amount >= 1000                                                                                  | BR-1.8, BR-7.11 | Минимальная сумма заказа 1000 ₽                                                                                     |
+| order            | delivery_timestamp         | IS NULL OR delivery_timestamp >= order_timestamp                                                      | BR-7.13         | Время окончания не раньше создания                                                                                  |
+| order            | status, delivery_timestamp | (status = 'доставлен' AND delivery_timestamp IS NOT NULL) OR (status <> 'доставлен')                  | BR-7.12         | Время окончания заполняется при статусе «доставлен»                                                                 |
+| order_structure  | quantity                   | quantity > 0                                                                                          | BR-7.15         | Количество положительное                                                                                            |
+| payment          | amount                     | amount >= 0                                                                                           | BR-8.2          | Сумма попытки неотрицательна (избыточен из-за FK на total_amount, оставлен как страховка)                           |
+| review           | rating                     | rating BETWEEN 1 AND 5                                                                                | BR-9.4          | Рейтинг отзыва от 1 до 5                                                                                            |
+| review           | description                | LENGTH(trim(...)) > 0                                                                                 | BR-9.3, BR-11.3 | Текст отзыва обязателен                                                                                             |
+| courier_pay      | month                      | month BETWEEN 1 AND 12                                                                                | —               | Месяц 1–12 (календарная логика)                                                                                     |
+| courier_pay      | year                       | year BETWEEN 2020 AND 2100                                                                            | BR-10.2         | Год выплаты — разумный горизонт; BR-10.2 не задаёт диапазон, CHECK защищает от опечаток                             |
+| courier_pay      | amount                     | amount >= 0                                                                                           | BR-10.4         | Сумма зарплаты неотрицательна                                                                                       |
+| courier_pay      | coefficient_used           | BETWEEN 0.1 AND 0.5                                                                                   | BR-6.4          | Применённый коэффициент из диапазона BR-6.4                                                                         |
 
 ---
 

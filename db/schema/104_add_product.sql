@@ -17,10 +17,5 @@ BEGIN
     VALUES
         (exts.uuid_generate_v4(), p_name, p_product_category_id, p_price,
          p_restaurant_id, p_photo_url, NULL, p_status, p_description);
-EXCEPTION
-    WHEN foreign_key_violation THEN
-        RAISE EXCEPTION 'Не существуют категория блюда или ресторан.';
-    WHEN check_violation OR not_null_violation THEN
-        RAISE EXCEPTION 'Атрибуты блюда нарушают ограничения схемы';
 END;
 $$;
